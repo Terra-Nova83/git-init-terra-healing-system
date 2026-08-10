@@ -1,0 +1,44 @@
+{
+  "summary": "Executed full backend + frontend testing for the RF-Sensing telemetry app. Backend: 10/10 pytest tests passed covering /api/config, mode/band switching (REST + WS action), telemetry latest/history (no _id/_pk leakage), sessions, WebSocket connected+telemetry stream frames (~2Hz, seq monotonic), WS set_mode, and LLM /api/insights/analyze (returned real German text, severity MEDIUM). Frontend: Dashboard loads, WS shows LIVE (data-status=connected), seq-counter increments (#94->#99), all required data-testids present (virtual-field, bubbles-core, confidence-gauge, confidence-level, csi-charts, telemetry-stream, fusion-state, fusion-score-value, stat-rssi/snr/entities, model-presence/motion/signal/stability), mode switcher works, LLM insight button produces insight-text + insight-severity=MEDIUM, nav to System-Diagramm and Sessions works (sessions-list renders). One frontend defect: React 'duplicate key' console warnings flood while streaming.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "useTelemetry hook (src/hooks/useTelemetry.js) + TelemetryStream (key={f.seq})",
+        "issue": "Under React StrictMode the useEffect runs twice and connect() opens TWO WebSocket connections. Both push identical telemetry frames into history, so every seq value appears twice in state -> React emits continuous 'Encountered two children with the same key' warnings (visible for seq 96..130+ during the run). Functionality still works but it is a real double-subscription bug (2x network + duplicate history rows in TelemetryStream). Fix at root: guard connect() with wsRef.current existence check, or use React 18 StrictMode-safe pattern (return cleanup that fully closes and null-out ref before reconnect). Alternatively, dedupe history by seq or use composite key key={`${f.seq}-${idx}`}.",
+        "selector": "[data-testid=telemetry-stream] [data-testid=telemetry-row]",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "CSICharts",
+        "issues": ["Recharts warnings 'width(-1) and height(-1) of chart should be greater than 0' fire on the first paint before the ResponsiveContainer measures its parent. Harmless, but consider setting an explicit min-height on the chart wrapper."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_rf_backend.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix double WebSocket subscription in src/hooks/useTelemetry.js (StrictMode double-invoke) so telemetry frames are not duplicated in history and React key warnings disappear. Simplest patch: at the top of connect() do `if (wsRef.current && wsRef.current.readyState <= 1) return;` and clear wsRef in ws.onclose. Alternatively dedupe by seq when appending to history.",
+    "Optional: give recharts wrappers a minHeight to silence '-1 width/height' warnings on initial mount."
+  ],
+  "critical_code_review_comments": [
+    "server.py: uses deprecated FastAPI @app.on_event('startup'/'shutdown'). Consider lifespan handlers for future-proofing.",
+    "server.py POST /api/config/mode returns 200 with {ok:false} for invalid mode instead of HTTP 400. Fine but non-standard.",
+    "rf_engine.py + server.py: single global `pipeline` and `SESSION_ID` are process-wide; horizontal scaling would need externalization. Acceptable for MVP.",
+    "useTelemetry.js: no guard against StrictMode double mount -> duplicate WS connections (see bug above).",
+    "LLM call uses model gpt-5.4 as specified; graceful deterministic fallback exists on failure - good."
+  ],
+  "updated_files": ["/app/backend/tests/test_rf_backend.py"],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "~95% (all flows work, non-blocking console warning)"},
+  "test_credentials": "n/a (no auth)",
+  "seed_data_creation": "none (telemetry loop generates and persists frames automatically)",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend endpoints and WebSocket are all healthy. Only outstanding item is the useTelemetry double-connection under React StrictMode causing duplicate history entries and React key warnings. After fix, verify: (a) no 'Encountered two children with the same key' errors in browser console, (b) TelemetryStream rows have unique seq values (no duplicates), (c) backend logs show only 1 active client per browser tab (GET /api/config -> clients field, or Header client-count). WS URL under /api prefix routes correctly through ingress.",
+  "rca of the issue": "React 18 StrictMode intentionally double-invokes effects in dev. useTelemetry's useEffect calls connect() twice; the first WebSocket is not closed before the second is created (wsRef gets overwritten), so both sockets stay open and their onmessage handlers both call setHistory, appending each incoming frame twice. TelemetryStream keys rows by f.seq -> duplicate keys -> React warning. Mitigation: idempotent connect() guarded by wsRef.current state, or dedupe by seq when appending, or key by composite `${seq}-${idx}`."
+}

@@ -1,0 +1,104 @@
+{
+  "theme": "Light Technical Analysis Theme (Swiss & High-Contrast)",
+  "app_type": "Real-time Monitoring & Control Room Analytics Dashboard",
+  "typography": {
+    "headings": {
+      "font_family": "'Cabinet Grotesk', 'General Sans', sans-serif",
+      "weights": ["font-medium", "font-bold"],
+      "usage": "Use tight letter spacing (tracking-tight) for all major panel titles and the main dashboard header."
+    },
+    "body_data": {
+      "font_family": "'IBM Plex Mono', 'JetBrains Mono', monospace",
+      "weights": ["font-normal", "font-medium"],
+      "usage": "CRITICAL: Use monospace for ALL live telemetry streams, scores, model weights, and coordinate data to ensure numbers don't jump horizontally during 2Hz WebSocket updates. Use tabular-nums."
+    }
+  },
+  "colors": {
+    "background": {
+      "app": "bg-zinc-50",
+      "surface": "bg-white",
+      "surface_alt": "bg-zinc-100"
+    },
+    "text": {
+      "primary": "text-zinc-900",
+      "secondary": "text-zinc-500",
+      "muted": "text-zinc-400"
+    },
+    "border": {
+      "default": "border-zinc-200",
+      "active": "border-zinc-300"
+    },
+    "status_semantic": {
+      "normal": "blue-600",
+      "active": "emerald-500",
+      "idle": "amber-500",
+      "anomaly": "red-500",
+      "presence": "violet-500",
+      "motion": "amber-500",
+      "signal": "emerald-500",
+      "stability": "sky-500"
+    },
+    "forbidden_colors": ["#1B93A4", "teal", "#7351B7"],
+    "rule": "Avoid generic SaaS gradients. Use stark structural grayscale for hierarchy, and reserve the semantic colors strictly for charting, status modes, and telemetry highlights."
+  },
+  "visual_enhancers": {
+    "surfaces": "Grid Borders strategy: Use 1px sharp borders (`border-border`) with flat white backgrounds for widgets. Avoid soft drop shadows; instead, use strict, technical grid boundaries. Apply a very subtle `-translate-y-px shadow-sm` on hover for interactive elements.",
+    "anomaly_panel": "Use 'The Tracing Beam' (Linear/Aceternity style) or an explicit red/warning colored left-border (`border-l-4 border-l-red-500`) to highlight the LLM Anomaly/Insight panel, making it distinct from normal telemetry.",
+    "radar_field": "Use an explicit canvas or SVG backdrop with concentric circles colored in muted gray (`stroke-zinc-200`) and overlay glowing, animated elements (`bg-blue-500/20`, etc.) to simulate the unfolding frequencies."
+  },
+  "layouts": {
+    "strategy": "MODE B: High Density Grid (Bento Layout). Every pixel matters for control rooms.",
+    "grid_structure": "grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-4 or gap-6",
+    "sections": {
+      "header": "col-span-full h-16 sticky top-0 z-50 backdrop-blur-xl bg-white/70 border-b border-zinc-200 flex items-center justify-between px-6",
+      "virtual_field_radar": "col-span-12 lg:col-span-7 row-span-2 bg-white border border-zinc-200 p-6 flex flex-col (Virtual Scannable Field)",
+      "bubbles_core_fusion": "col-span-12 lg:col-span-5 row-span-1 bg-white border border-zinc-200 p-6 (Fusion & Confidence Engine)",
+      "model_weights": "col-span-12 lg:col-span-5 row-span-1 grid grid-cols-2 gap-4 (Presence, Motion, Signal, Stability)",
+      "llm_insights": "col-span-12 lg:col-span-4 border border-zinc-200 bg-white p-6",
+      "telemetry_stream": "col-span-12 lg:col-span-8 border border-zinc-200 bg-white p-6 (Live WebSockets, RSSI, CSI)"
+    }
+  },
+  "motion": {
+    "websocket_interpolation": "Use framer-motion `spring` physics (stiffness: 100, damping: 20) for the Bubbles Core and Model Score gauges so the 2Hz updates feel fluid rather than jumping abruptly.",
+    "radar_waves": "Use infinite CSS keyframe animations or framer-motion looping variants to slowly expand concentric rings (`scale: [1, 2, 3], opacity: [0.8, 0, 0]`) simulating electromagnetic waves."
+  },
+  "components": {
+    "BubblesCore": "A central visualization (SVG or HTML nodes). Render floating `motion.div` circles that map to object/presence. Size = object volume/distance, Color = confidence scale (e.g., violet for high confidence, gray for low).",
+    "VirtualScannableField": "A radar/spatial map overlay showing 5G/LTE/3G/UMTS coverage areas. It should look technical and map-like. Plot coordinates [x,y] of detected entities on this spatial canvas.",
+    "ConfidenceGauge": "Use a semi-circle or radial progress gauge (via Recharts or pure SVG) mapped to the FusionEngine combined score.",
+    "ModelScorePanels": "4 distinct micro-cards. Each displays its fixed weight (0.40, 0.30, 0.20, 0.10) alongside the live score. Use `tabular-nums` heavily.",
+    "ConfigModeSwitcher": "A segmented control (Shadcn Tabs customized to look like a hardware toggle switch) to change modes: Normal, Active, Idle, Anomaly.",
+    "CSI_Charts": "Use Recharts (`AreaChart` or `LineChart`) with dot=false, strokeWidth=1, and linear gradients that fade into the bottom. Minimal grid lines.",
+    "SystemDiagram": "For `system-diagram.html` or the React equivalent page, use an architectural node-based flow. e.g., 'Raw Data -> Models -> Fusion -> Dashboard'."
+  },
+  "accessibility": {
+    "contrast": "Maintain WCAG AA contrast, especially inside the Bubbles Core (ensure text inside bubbles is readable).",
+    "testing": "CRITICAL: Add `data-testid` attributes to every gauge, chart container, websocket status indicator, mode switcher, and telemetry row (e.g., `data-testid=\"mode-switch-active\"`, `data-testid=\"fusion-score-value\"`)."
+  },
+  "3d_libraries": {
+    "data_viz": "recharts (for CSI/RSSI streams, Gauges)",
+    "radar_canvas": "visx or standard HTML5 Canvas/SVG (for the spatial scannable field). Keep it 2D flat for maximum precision in the light theme, unless WebGL is strictly necessary for high node counts.",
+    "icons": "lucide-react (keep them sharp, strokeWidth: 1.5)"
+  },
+  "media": {
+    "abstract_wave_backgrounds": [
+      {
+        "url": "https://images.unsplash.com/photo-1765046255505-083da4b856c8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzF8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMHRlY2glMjB3YXZlcyUyMGxpZ2h0JTIwd2hpdGV8ZW58MHx8fHwxNzg2MzcyMjUwfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Abstract white mesh wave. Can be used for the system diagram page background at 10% opacity.",
+        "category": "backgrounds"
+      }
+    ]
+  },
+  "component_instructions": {
+    "file_extension": "CRITICAL: Generate all components as `.jsx` or `.js` files, not `.tsx`. Ensure standard React JS patterns.",
+    "ui_library": "Use Shadcn/UI for structured elements (Tabs for config mode, Cards, Dialogs) but strip away Vercel-like dropshadows to fit the Swiss Technical Grid."
+  },
+  "universal_guidelines_for_main_agent": [
+    "You tend to converge toward generic, 'on distribution' outputs. Avoid this: make creative, distinctive frontends.",
+    "Do not make generic centered layouts. The dashboard must be left-aligned, highly dense, and grid-based.",
+    "NEVER use AI assistant emoji characters like 🤖, 🔮, 🧠. Use professional `lucide-react` icons (e.g., Activity, Radio, Scan).",
+    "Ensure the WebSocket connection status (connected/reconnecting/error) is perpetually visible in the header with a pulsing indicator.",
+    "Use 2-3x more spacing (padding) within parent containers, but keep the data streams tight and dense.",
+    "Do not add universal transitions (`transition: all`). Target specific properties like `transition: transform 0.2s ease`."
+  ]
+}
