@@ -235,10 +235,15 @@ async def sessions():
 
 
 @api_router.get("/sessions/{session_id}/frames")
-async def session_frames(session_id: str, limit: int = 600):
+async def session_frames(session_id: str, limit: int = 400, light: int = 1):
     limit = max(1, min(limit, 5000))
+    projection = {"_id": 0, "_pk": 0}
+    if light:
+        # CSI-Rohvektoren fürs Replay weglassen -> deutlich kleinere Payload
+        projection["raw.signal.csi_amplitude"] = 0
+        projection["raw.signal.csi_phase"] = 0
     docs = await db.telemetry.find(
-        {"session_id": session_id}, {"_id": 0, "_pk": 0}
+        {"session_id": session_id}, projection
     ).sort("seq", 1).to_list(limit)
     return docs
 

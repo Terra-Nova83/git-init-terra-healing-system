@@ -141,16 +141,64 @@ function Rings({ color }) {
   );
 }
 
-// Kamera fliegt zum fokussierten Objekt
+// Kamera fliegt zum fokussierten Objekt (verfeinert: richtungserhaltend, ruckfrei)
 function CameraRig({ focusEntity, controlsRef }) {
-  useFrame((state) => {
-    if (!focusEntity || !controlsRef.current) return;
-    const tx = focusEntity.x * R, tz = focusEntity.y * R, ty = 0.6;
-    controlsRef.current.target.lerp(new THREE.Vector3(tx, ty, tz), 0.06);
-    state.camera.position.lerp(new THREE.Vector3(tx + 2.8, ty + 2.4, tz + 2.8), 0.06);
-    controlsRef.current.update();
+  const settle = useRef(0);
+  useFrame((state, delta) => {
+    const ctrl = controlsRef.current;
+    if (!focusEntity || !ctrl) { settle.current = 0; return; }
+    const targetPos = new THREE.Vector3(focusEntity.x * R, 0.6, focusEntity.y * R);
+    const cam = state.camera;
+
+    // aktuelle horizontale Blickrichtung beibehalten -> kein Umspringen
+    const dir = new THREE.Vector3().subVectors(cam.position, ctrl.target);
+    dir.y = 0;
+    if (dir.lengthSq() < 0.0001) dir.set(1, 0, 1);
+    dir.normalize();
+
+    const dist = 4.2;
+    const desiredCam = new THREE.Vector3(
+      targetPos.x + dir.x * dist,
+      targetPos.y + 2.4,
+      targetPos.z + dir.z * dist
+    );
+
+    // frameraten-unabhängige Glättung; verlangsamt beim Ankommen
+    const a = 1 - Math.exp(-delta * 3.5);
+    ctrl.target.lerp(targetPos, a);
+    cam.position.lerp(desiredCam, a);
+    ctrl.update();
   });
   return null;
+}
+
+// Ganzflächige Boden-Heatmap nach Signalstärke (Radialverlauf, heiß in der Mitte)
+function GroundSignalHeat({ signalScore }) {
+  const bucket = Math.round(signalScore * 20) / 20;
+  const texture = useMemo(() => {
+    const S = 256;
+    const c = document.createElement("canvas");
+    c.width = c.height = S;
+    const ctx = c.getContext("2d");
+    const col = heatColor(bucket);
+    const r = Math.round(col.r * 255), g = Math.round(col.g * 255), b = Math.round(col.b * 255);
+    const grad = ctx.createRadialGradient(S / 2, S / 2, 8, S / 2, S / 2, S / 2);
+    grad.addColorStop(0, `rgba(${r},${g},${b},${(0.18 + 0.55 * bucket).toFixed(3)})`);
+    grad.addColorStop(0.45, `rgba(${r},${g},${b},${(0.08 + 0.32 * bucket).toFixed(3)})`);
+    grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, S, S);
+    const t = new THREE.CanvasTexture(c);
+    t.needsUpdate = true;
+    return t;
+  }, [bucket]);
+
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]}>
+      <circleGeometry args={[R * 1.35, 64]} />
+      <meshBasicMaterial map={texture} transparent depthWrite={false} side={THREE.DoubleSide} />
+    </mesh>
+  );
 }
 
 function Scene({ frame, focusId, onSelect, showHeat, focusEntity }) {
@@ -158,12 +206,14 @@ function Scene({ frame, focusId, onSelect, showHeat, focusEntity }) {
   const color = MODE_META[mode]?.color || "#2563eb";
   const entities = frame?.entities || [];
   const controlsRef = useRef();
+  const signalScore = frame?.models?.signal?.score ?? 0;
 
   return (
     <>
       <ambientLight intensity={0.8} />
       <directionalLight position={[6, 10, 4]} intensity={1.1} castShadow />
       <Grid args={[24, 24]} cellSize={1} cellColor="#e4e4e7" sectionSize={4} sectionColor="#cbd5e1" fadeDistance={26} infiniteGrid position={[0, -0.01, 0]} />
+      {showHeat && <GroundSignalHeat signalScore={signalScore} />}
       <Rings color={color} />
       <RadarSweep color={color} />
       <WaveRing delay={0} color={color} />
@@ -246,7 +296,7 @@ export default function Field3D({ frame }) {
       {/* Heat-Legende */}
       {showHeat && (
         <div className="absolute right-4 bottom-4 z-10 rounded-md border border-zinc-200 bg-white/85 backdrop-blur px-3 py-2">
-          <div className="font-mono text-[10px] text-zinc-500 mb-1">Heat · Konfidenz</div>
+          <div className="font-mono text-[10px] text-zinc-500 mb-1">Heat · Signal & Konfidenz</div>
           <div className="h-2 w-32 rounded-full" style={{ background: "linear-gradient(90deg, #2563eb, #22c55e, #eab308, #ef4444)" }} />
           <div className="flex justify-between font-mono text-[9px] text-zinc-400 mt-0.5"><span>0%</span><span>100%</span></div>
         </div>

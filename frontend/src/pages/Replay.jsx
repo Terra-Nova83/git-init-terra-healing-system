@@ -4,8 +4,9 @@ import { BubblesCore } from "../components/dashboard/BubblesCore";
 import { ConfidenceGauge } from "../components/dashboard/ConfidenceGauge";
 import { ModelScorePanels } from "../components/dashboard/ModelScorePanels";
 import { ExportButtons } from "../components/dashboard/ExportButtons";
+import { recordReplay } from "../lib/replayVideo";
 import { MODE_META } from "../lib/rf";
-import { Play, Pause, SkipBack, SkipForward, Film } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Film, Video } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const SPEEDS = [0.5, 1, 2, 4];
@@ -18,6 +19,9 @@ export default function Replay() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recProgress, setRecProgress] = useState(0);
+  const [recError, setRecError] = useState(null);
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -35,7 +39,7 @@ export default function Replay() {
     if (!sid) return;
     setLoading(true);
     setPlaying(false);
-    fetch(`${BACKEND_URL}/api/sessions/${sid}/frames?limit=600`)
+    fetch(`${BACKEND_URL}/api/sessions/${sid}/frames?limit=400&light=1`)
       .then((r) => r.json())
       .then((data) => {
         setFrames(data);
@@ -70,6 +74,28 @@ export default function Replay() {
     setIdx((i) => Math.min(frames.length - 1, Math.max(0, i + d)));
   };
 
+  const exportVideo = async () => {
+    if (!frames.length || recording) return;
+    setPlaying(false);
+    setRecording(true);
+    setRecProgress(0);
+    setRecError(null);
+    try {
+      const blob = await recordReplay(frames, { fps: 12, size: 640, onProgress: setRecProgress });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `replay_${new Date().toISOString().replace(/[:.]/g, "-")}.webm`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch (e) {
+      console.error("Video-Export fehlgeschlagen", e);
+      setRecError(e?.message || "Video-Export fehlgeschlagen");
+    } finally {
+      setRecording(false);
+    }
+  };
+
   return (
     <div className="col-span-full p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4">
       {/* Steuerleiste */}
@@ -79,8 +105,25 @@ export default function Replay() {
             <Film className="h-4 w-4 text-zinc-900" strokeWidth={1.5} />
             <h2 className="text-sm font-bold tracking-tight text-zinc-900">Session-Replay</h2>
           </div>
-          <ExportButtons history={frames} />
+          <div className="flex items-center gap-2">
+            <ExportButtons history={frames} />
+            <button
+              data-testid="replay-video-export"
+              onClick={exportVideo}
+              disabled={!frames.length || recording}
+              className="flex items-center gap-1 rounded border border-zinc-200 px-2 py-1 font-mono text-[11px] text-zinc-600 hover:bg-zinc-50 disabled:opacity-40"
+            >
+              <Video className="h-3 w-3" />
+              {recording ? `Video ${Math.round(recProgress * 100)}%` : "Video"}
+            </button>
+          </div>
         </div>
+
+        {recError && (
+          <div data-testid="replay-video-error" className="mb-2 text-[11px] font-mono text-red-500">
+            ⚠ {recError}
+          </div>
+        )}
 
         <div className="flex flex-col md:flex-row md:items-center gap-3">
           <select
