@@ -1,4 +1,6 @@
+import { useEffect, useRef } from "react";
 import { ConfigModeSwitcher } from "../components/dashboard/ConfigModeSwitcher";
+import { WeightsControl } from "../components/dashboard/WeightsControl";
 import { VirtualScannableField } from "../components/dashboard/VirtualScannableField";
 import { BubblesCore } from "../components/dashboard/BubblesCore";
 import { ConfidenceGauge } from "../components/dashboard/ConfidenceGauge";
@@ -7,7 +9,10 @@ import { CSICharts } from "../components/dashboard/CSICharts";
 import { TelemetryStream } from "../components/dashboard/TelemetryStream";
 import { LLMInsightPanel } from "../components/dashboard/LLMInsightPanel";
 import { MODE_META } from "../lib/rf";
-import { Waves, Target, Radar, Boxes } from "lucide-react";
+import { toast } from "../components/ui/sonner";
+import { Waves, Target, Radar, Boxes, SlidersHorizontal, AlertTriangle } from "lucide-react";
+
+const LOW_CONF_THRESHOLD = 0.4;
 
 const FUSION_STATE = {
   clear: "Feld frei",
@@ -37,13 +42,58 @@ export default function Dashboard({ frame, history, sendAction }) {
   const signal = frame?.raw?.signal || {};
   const modeColor = MODE_META[mode]?.color;
 
+  const lowConf = frame && typeof confidence.value === "number" && confidence.value < LOW_CONF_THRESHOLD;
+  const isAnomaly = mode === "anomaly";
+  const alertActive = isAnomaly || lowConf;
+  const alertRef = useRef(false);
+
+  useEffect(() => {
+    if (alertActive && !alertRef.current) {
+      alertRef.current = true;
+      const reason = isAnomaly ? "Anomalie-Modus aktiv" : "Niedrige Konfidenz";
+      toast.error(`⚠ ${reason}`, {
+        description: isAnomaly
+          ? "Ungewöhnliche Signalwerte erkannt — Telemetrie prüfen."
+          : `Konfidenz unter ${Math.round(LOW_CONF_THRESHOLD * 100)}% — Erkennung unsicher.`,
+        duration: 5000,
+      });
+    } else if (!alertActive && alertRef.current) {
+      alertRef.current = false;
+    }
+  }, [alertActive, isAnomaly]);
+
   return (
     <div className="col-span-full grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 sm:p-6">
+      {/* Anomalie-Warnbanner */}
+      {alertActive && (
+        <div
+          data-testid="anomaly-banner"
+          className="lg:col-span-12 flex items-center gap-3 rounded-md border border-red-200 bg-red-50 border-l-4 border-l-red-500 px-4 py-3 animate-pulse-dot"
+        >
+          <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" strokeWidth={1.5} />
+          <div className="leading-tight">
+            <div className="text-sm font-bold text-red-700">
+              {isAnomaly ? "ALARM · Anomalie-Modus" : "ALARM · Niedrige Konfidenz"}
+            </div>
+            <div className="font-mono text-[11px] text-red-600">
+              Fusion {(fusion.score * 100 || 0).toFixed(0)}% · Konfidenz {(confidence.value * 100 || 0).toFixed(0)}% ({confidence.level}) · {frame?.entities?.length ?? 0} Objekt(e)
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modus-Steuerung */}
       <Panel testid="config-panel" title="Konfiguration · Modus" icon={Radar}
         className="lg:col-span-12"
         right={<span className="font-mono text-[11px] text-zinc-500">Live umschaltbar</span>}>
         <ConfigModeSwitcher mode={mode} sendAction={sendAction} />
+      </Panel>
+
+      {/* Model-Gewichte (live) */}
+      <Panel testid="weights-panel" title="Model-Gewichte · Live-Anpassung" icon={SlidersHorizontal}
+        className="lg:col-span-12"
+        right={<span className="font-mono text-[11px] text-zinc-500">FusionEngine</span>}>
+        <WeightsControl frame={frame} />
       </Panel>
 
       {/* Virtuelles Scan-Feld */}
@@ -69,7 +119,7 @@ export default function Dashboard({ frame, history, sendAction }) {
 
       {/* Fusion + Confidence */}
       <Panel testid="fusion-panel" title="FusionEngine · ConfidenceEngine" icon={Waves}
-        className="lg:col-span-5">
+        className={`lg:col-span-5 ${alertActive ? "border-red-300 border-l-4 border-l-red-500 bg-red-50/40" : ""}`}>
         <div className="grid grid-cols-2 gap-4 items-center">
           <div>
             <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Fusion Score</div>

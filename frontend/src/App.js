@@ -2,6 +2,7 @@ import { useState } from "react";
 import "@/App.css";
 import { useTelemetry } from "@/hooks/useTelemetry";
 import { Header } from "@/components/dashboard/Header";
+import { Toaster } from "@/components/ui/sonner";
 import Dashboard from "@/pages/Dashboard";
 import SystemDiagram from "@/pages/SystemDiagram";
 import Sessions from "@/pages/Sessions";
@@ -20,6 +21,7 @@ function App() {
         {view === "diagram" && <SystemDiagram />}
         {view === "sessions" && <Sessions />}
       </div>
+      <Toaster position="top-right" richColors />
     </div>
   );
 }
