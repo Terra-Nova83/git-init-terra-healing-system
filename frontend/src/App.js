@@ -4,6 +4,7 @@ import { useTelemetry } from "@/hooks/useTelemetry";
 import { Header } from "@/components/dashboard/Header";
 import { Toaster } from "@/components/ui/sonner";
 import Dashboard from "@/pages/Dashboard";
+import Field3D from "@/pages/Field3D";
 import SystemDiagram from "@/pages/SystemDiagram";
 import Sessions from "@/pages/Sessions";
 
@@ -19,6 +20,7 @@ function App() {
           <Dashboard frame={frame} history={history} sendAction={sendAction} />
         )}
         {view === "diagram" && <SystemDiagram />}
+        {view === "field3d" && <Field3D frame={frame} />}
         {view === "sessions" && <Sessions />}
       </div>
       <Toaster position="top-right" richColors />

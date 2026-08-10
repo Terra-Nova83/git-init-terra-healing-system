@@ -36,6 +36,13 @@ export const Header = ({ status, frame, view, setView }) => {
           Dashboard
         </button>
         <button
+          data-testid="nav-field3d"
+          onClick={() => setView("field3d")}
+          className={`text-xs font-medium px-3 py-1.5 rounded transition-colors ${view === "field3d" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800"}`}
+        >
+          3D-Feld
+        </button>
+        <button
           data-testid="nav-diagram"
           onClick={() => setView("diagram")}
           className={`text-xs font-medium px-3 py-1.5 rounded transition-colors ${view === "diagram" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800"}`}
