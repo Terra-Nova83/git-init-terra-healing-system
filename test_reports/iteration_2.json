@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 2 verified the four new features (3D focus, Höhen-Heatmap, Session-Replay, Daten-Export) plus regression of existing endpoints. Backend: 13/13 pytest tests pass, including the new GET /api/sessions/{session_id}/frames (returns full-shape frames sorted by seq asc, no _id/_pk leakage, respects limit) and regression on /config, /config/mode, /config/band, /config/weights, /sessions, /telemetry/latest, /telemetry/history, /insights/analyze, WS /api/ws/telemetry (connected+telemetry+set_mode). Frontend: header/WS LIVE, navigation across all 5 tabs (nav-dashboard/nav-field3d/nav-diagram/nav-replay/nav-sessions) works. Dashboard export-csv-btn and export-json-btn become enabled after live frames arrive and trigger real file downloads (telemetry_<ts>.csv/.json). Field3D canvas renders; toggle-heatmap flips label 'Heatmap AN' <-> 'Heatmap AUS'; reset-focus is disabled initially (no focus). Replay: session dropdown auto-selects a session with frames (87 frames loaded); replay-playpause advances frames (verified Frame 1 -> Frame 4 after ~1.5s play); replay-stepforward/stepback move by ±1; all four speed buttons (0.5/1/2/4) present and clickable; replay-fusion, ConfidenceGauge, VirtualScannableField, BubblesCore, ModelScorePanels re-render as idx changes; replay-scrubber max reflects frames.length-1; Replay export CSV/JSON downloads verified.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Replay session <select>",
+        "issues": ["Console hydration warning: '<span> cannot be a child of <option>' fires because a Radix/shadcn <SelectItem>-style child structure appears inside a native <select>. Trace points to option content; visually harmless but it is a real React DOM nesting warning."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_rf_backend.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Silence '<span> cannot be a child of <option>' hydration warning coming from Replay session <select> or an unrelated shadcn Select on the page.",
+    "(Optional) StrictMode double-WS from iteration_1 was NOT re-verified; if not yet fixed, telemetry-stream key warnings may still fire."
+  ],
+  "critical_code_review_comments": [
+    "Field3D.jsx: EntityMesh onClick uses e.stopPropagation() correctly and CameraRig lerps camera+target smoothly - clean implementation. HeatDisc opacity uses AdditiveBlending, looks great.",
+    "Replay.jsx: setInterval timer correctly cleared on unmount / speed change; auto-stops at last frame. Good.",
+    "ExportButtons.jsx: URL.revokeObjectURL is called immediately after a.click() - on some browsers the download may not have started yet, causing an aborted download. Consider revoking after a short setTimeout or on window 'blur'. Not observed in this test (downloads worked).",
+    "server.py: /api/sessions/{session_id}/frames has no upper bound on 'limit' - a client could request millions. Consider clamp min(limit, 5000).",
+    "server.py: still uses deprecated @app.on_event('startup'/'shutdown') (carried over from iteration 1)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_rf_backend.py (added test_session_frames, test_session_frames_limit, test_set_weights)"
+  ],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "~95% (all required flows verified end-to-end)"},
+  "test_credentials": "n/a (no auth)",
+  "seed_data_creation": "none (telemetry loop persists frames automatically; used active session which had 87+ frames)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "3D entity mesh click via Playwright mouse.click on canvas at various offsets did NOT hit a WebGL mesh (raycast fails from 2D coords). This is a Playwright/WebGL limitation, not an app defect - reset-focus stayed disabled. Manual/keyboard interaction with three.js is not reliably scriptable; the onClick handler itself is wired correctly per code review. Everything else was exercised. Dashboard and Replay ExportButtons downloads were verified via page.expect_download and produced real files.",
+  "rca of the issue": "n/a - no blocking issue found this iteration."
+}

@@ -8,6 +8,7 @@ import { ModelScorePanels } from "../components/dashboard/ModelScorePanels";
 import { CSICharts } from "../components/dashboard/CSICharts";
 import { TelemetryStream } from "../components/dashboard/TelemetryStream";
 import { LLMInsightPanel } from "../components/dashboard/LLMInsightPanel";
+import { ExportButtons } from "../components/dashboard/ExportButtons";
 import { MODE_META } from "../lib/rf";
 import { toast } from "../components/ui/sonner";
 import { Waves, Target, Radar, Boxes, SlidersHorizontal, AlertTriangle } from "lucide-react";
@@ -157,7 +158,8 @@ export default function Dashboard({ frame, history, sendAction }) {
 
       {/* Telemetry Stream */}
       <Panel testid="stream-panel" title="Telemetry Stream · 2 Hz" icon={Radar}
-        className="lg:col-span-5">
+        className="lg:col-span-5"
+        right={<ExportButtons history={history} />}>
         <TelemetryStream history={history} />
       </Panel>
 

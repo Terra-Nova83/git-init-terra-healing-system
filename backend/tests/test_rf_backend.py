@@ -105,6 +105,51 @@ def test_sessions(api):
     assert "_id" not in docs[0]
 
 
+# --- session frames (NEW) ---
+def test_session_frames(api):
+    import time as _t
+    _t.sleep(2.0)
+    sessions = api.get(f"{BASE_URL}/api/sessions").json()
+    with_frames = [s for s in sessions if s.get("frames", 0) > 0]
+    assert with_frames, "expected at least one session with frames"
+    sid = with_frames[0]["session_id"]
+    r = api.get(f"{BASE_URL}/api/sessions/{sid}/frames?limit=600")
+    assert r.status_code == 200
+    frames = r.json()
+    assert isinstance(frames, list) and len(frames) > 0
+    # sorted by seq ascending
+    seqs = [f["seq"] for f in frames]
+    assert seqs == sorted(seqs)
+    # no _id or _pk leakage; full-shape frames
+    for f in frames[:5]:
+        assert "_id" not in f and "_pk" not in f
+        assert "seq" in f and "mode" in f
+        assert "raw" in f and "signal" in f["raw"]
+        assert "models" in f and "confidence" in f and "fusion" in f
+        assert "entities" in f and isinstance(f["entities"], list)
+
+
+def test_session_frames_limit(api):
+    sessions = api.get(f"{BASE_URL}/api/sessions").json()
+    with_frames = [s for s in sessions if s.get("frames", 0) > 0]
+    if not with_frames:
+        pytest.skip("no session with frames")
+    sid = with_frames[0]["session_id"]
+    r = api.get(f"{BASE_URL}/api/sessions/{sid}/frames?limit=3")
+    assert r.status_code == 200
+    assert len(r.json()) <= 3
+
+
+def test_set_weights(api):
+    payload = {"presence": 0.4, "motion": 0.3, "signal": 0.2, "stability": 0.1}
+    r = api.post(f"{BASE_URL}/api/config/weights", json=payload)
+    assert r.status_code == 200
+    d = r.json()
+    assert d["ok"] is True
+    for k, v in payload.items():
+        assert abs(d["weights"][k] - v) < 0.05
+
+
 # --- LLM insights ---
 def test_insights_analyze(api):
     r = api.post(f"{BASE_URL}/api/insights/analyze", timeout=60)

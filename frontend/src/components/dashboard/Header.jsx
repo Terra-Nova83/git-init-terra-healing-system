@@ -50,6 +50,13 @@ export const Header = ({ status, frame, view, setView }) => {
           System-Diagramm
         </button>
         <button
+          data-testid="nav-replay"
+          onClick={() => setView("replay")}
+          className={`text-xs font-medium px-3 py-1.5 rounded transition-colors ${view === "replay" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800"}`}
+        >
+          Replay
+        </button>
+        <button
           data-testid="nav-sessions"
           onClick={() => setView("sessions")}
           className={`text-xs font-medium px-3 py-1.5 rounded transition-colors ${view === "sessions" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800"}`}

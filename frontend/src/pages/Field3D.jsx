@@ -1,9 +1,9 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Grid, Html } from "@react-three/drei";
 import * as THREE from "three";
 import { ENTITY_META, MODE_META } from "../lib/rf";
-import { Move3d, MousePointer2 } from "lucide-react";
+import { Move3d, MousePointer2, Flame, Crosshair } from "lucide-react";
 
 const R = 4; // Feldradius
 
@@ -13,11 +13,21 @@ const ENTITY_SHAPE = {
   structure: { h: 1.6, kind: "box" },
 };
 
-function EntityMesh({ entity }) {
+// Konfidenz -> Heat-Farbe (blau = kalt/niedrig, rot = heiß/hoch)
+function heatColor(v) {
+  const c = new THREE.Color();
+  c.setHSL((1 - Math.min(1, Math.max(0, v))) * 0.66, 0.9, 0.5);
+  return c;
+}
+
+function EntityMesh({ entity, selected, onSelect }) {
   const ref = useRef();
   const meta = ENTITY_META[entity.type] || ENTITY_META.human;
   const shape = ENTITY_SHAPE[entity.type] || ENTITY_SHAPE.human;
-  const target = useMemo(() => new THREE.Vector3(entity.x * R, shape.h / 2, entity.y * R), [entity.x, entity.y, shape.h]);
+  const target = useMemo(
+    () => new THREE.Vector3(entity.x * R, shape.h / 2, entity.y * R),
+    [entity.x, entity.y, shape.h]
+  );
 
   useFrame(() => {
     if (ref.current) ref.current.position.lerp(target, 0.15);
@@ -25,23 +35,57 @@ function EntityMesh({ entity }) {
 
   return (
     <group ref={ref} position={[entity.x * R, shape.h / 2, entity.y * R]}>
-      <mesh castShadow>
+      <mesh
+        castShadow
+        onClick={(e) => { e.stopPropagation(); onSelect(entity.id); }}
+        onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; }}
+        onPointerOut={() => { document.body.style.cursor = "default"; }}
+      >
         {shape.kind === "capsule" && <capsuleGeometry args={[0.18, shape.h - 0.36, 8, 16]} />}
         {shape.kind === "sphere" && <sphereGeometry args={[0.22, 20, 20]} />}
         {shape.kind === "box" && <boxGeometry args={[0.5, shape.h, 0.5]} />}
-        <meshStandardMaterial color={meta.color} emissive={meta.color} emissiveIntensity={0.35} roughness={0.4} />
+        <meshStandardMaterial
+          color={meta.color}
+          emissive={meta.color}
+          emissiveIntensity={selected ? 0.9 : 0.35}
+          roughness={0.4}
+        />
       </mesh>
+      {/* Auswahl-Highlight */}
+      {selected && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -shape.h / 2 + 0.02, 0]}>
+          <ringGeometry args={[0.42, 0.5, 40]} />
+          <meshBasicMaterial color="#18181b" transparent opacity={0.8} side={THREE.DoubleSide} />
+        </mesh>
+      )}
       {/* Bodenmarkierung */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -shape.h / 2 + 0.01, 0]}>
         <ringGeometry args={[0.28, 0.34, 32]} />
         <meshBasicMaterial color={meta.color} transparent opacity={0.6} side={THREE.DoubleSide} />
       </mesh>
       <Html center distanceFactor={12} position={[0, shape.h / 2 + 0.4, 0]}>
-        <div className="whitespace-nowrap rounded bg-white/90 border border-zinc-200 px-1.5 py-0.5 font-mono text-[9px] text-zinc-700 shadow-sm">
+        <div className={`whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-[9px] shadow-sm ${selected ? "bg-zinc-900 text-white border-zinc-900" : "bg-white/90 text-zinc-700 border-zinc-200"}`}>
           {meta.label} · {Math.round(entity.confidence * 100)}% · {entity.distance}m
         </div>
       </Html>
     </group>
+  );
+}
+
+// Heat-Zone unter jedem Objekt (Konfidenz-basiert)
+function HeatDisc({ entity }) {
+  const ref = useRef();
+  const target = useMemo(() => new THREE.Vector3(entity.x * R, 0.015, entity.y * R), [entity.x, entity.y]);
+  const color = useMemo(() => heatColor(entity.confidence), [entity.confidence]);
+  const radius = 0.6 + entity.confidence * 1.6;
+  useFrame(() => {
+    if (ref.current) ref.current.position.lerp(target, 0.15);
+  });
+  return (
+    <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[entity.x * R, 0.015, entity.y * R]}>
+      <circleGeometry args={[radius, 40]} />
+      <meshBasicMaterial color={color} transparent opacity={0.28} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} />
+    </mesh>
   );
 }
 
@@ -85,12 +129,10 @@ function Rings({ color }) {
           <meshBasicMaterial color="#d4d4d8" transparent opacity={0.7} side={THREE.DoubleSide} />
         </mesh>
       ))}
-      {/* Kern-Antenne */}
       <mesh position={[0, 0.25, 0]}>
         <coneGeometry args={[0.15, 0.5, 16]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.6} />
       </mesh>
-      {/* Scan-Dome (Halbkugel-Drahtgitter) */}
       <mesh>
         <sphereGeometry args={[R, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
         <meshBasicMaterial color={color} wireframe transparent opacity={0.06} />
@@ -99,52 +141,60 @@ function Rings({ color }) {
   );
 }
 
-function Scene({ frame }) {
+// Kamera fliegt zum fokussierten Objekt
+function CameraRig({ focusEntity, controlsRef }) {
+  useFrame((state) => {
+    if (!focusEntity || !controlsRef.current) return;
+    const tx = focusEntity.x * R, tz = focusEntity.y * R, ty = 0.6;
+    controlsRef.current.target.lerp(new THREE.Vector3(tx, ty, tz), 0.06);
+    state.camera.position.lerp(new THREE.Vector3(tx + 2.8, ty + 2.4, tz + 2.8), 0.06);
+    controlsRef.current.update();
+  });
+  return null;
+}
+
+function Scene({ frame, focusId, onSelect, showHeat, focusEntity }) {
   const mode = frame?.mode || "normal";
   const color = MODE_META[mode]?.color || "#2563eb";
   const entities = frame?.entities || [];
+  const controlsRef = useRef();
 
   return (
     <>
       <ambientLight intensity={0.8} />
       <directionalLight position={[6, 10, 4]} intensity={1.1} castShadow />
-      <Grid
-        args={[24, 24]}
-        cellSize={1}
-        cellColor="#e4e4e7"
-        sectionSize={4}
-        sectionColor="#cbd5e1"
-        fadeDistance={26}
-        infiniteGrid
-        position={[0, -0.01, 0]}
-      />
+      <Grid args={[24, 24]} cellSize={1} cellColor="#e4e4e7" sectionSize={4} sectionColor="#cbd5e1" fadeDistance={26} infiniteGrid position={[0, -0.01, 0]} />
       <Rings color={color} />
       <RadarSweep color={color} />
       <WaveRing delay={0} color={color} />
       <WaveRing delay={1} color={color} />
       <WaveRing delay={2} color={color} />
+      {showHeat && entities.map((e) => <HeatDisc key={`h-${e.id}`} entity={e} />)}
       {entities.map((e) => (
-        <EntityMesh key={e.id} entity={e} />
+        <EntityMesh key={e.id} entity={e} selected={e.id === focusId} onSelect={onSelect} />
       ))}
-      <OrbitControls
-        enablePan={false}
-        minDistance={4}
-        maxDistance={22}
-        maxPolarAngle={Math.PI / 2.15}
-        target={[0, 0.5, 0]}
-      />
+      {/* Klick ins Leere = Fokus lösen */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} onClick={() => onSelect(null)}>
+        <circleGeometry args={[R * 1.4, 8]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      <CameraRig focusEntity={focusEntity} controlsRef={controlsRef} />
+      <OrbitControls ref={controlsRef} makeDefault enablePan={false} minDistance={3} maxDistance={22} maxPolarAngle={Math.PI / 2.15} target={[0, 0.5, 0]} />
     </>
   );
 }
 
 export default function Field3D({ frame }) {
+  const [focusId, setFocusId] = useState(null);
+  const [showHeat, setShowHeat] = useState(true);
   const mode = frame?.mode || "normal";
   const meta = MODE_META[mode];
   const signal = frame?.raw?.signal || {};
+  const entities = frame?.entities || [];
+  const focusEntity = entities.find((e) => e.id === focusId) || null;
 
   return (
     <div className="col-span-full relative" style={{ height: "calc(100vh - 4rem)" }}>
-      {/* Overlay-Info */}
       <div className="absolute left-4 top-4 z-10 rounded-md border border-zinc-200 bg-white/85 backdrop-blur px-4 py-3">
         <div className="flex items-center gap-2">
           <Move3d className="h-4 w-4 text-zinc-900" strokeWidth={1.5} />
@@ -153,15 +203,37 @@ export default function Field3D({ frame }) {
         <div className="mt-2 space-y-0.5 font-mono text-[11px] text-zinc-600">
           <div>Modus: <span style={{ color: meta?.color }}>{meta?.label}</span></div>
           <div>Band: {signal.band_label} · {signal.frequency_mhz} MHz</div>
-          <div>Objekte: <span className="tabular-nums" data-testid="field3d-entities">{frame?.entities?.length ?? 0}</span></div>
+          <div>Objekte: <span className="tabular-nums" data-testid="field3d-entities">{entities.length}</span></div>
+          {focusEntity && (
+            <div className="text-zinc-900">Fokus: {focusEntity.id} · {Math.round(focusEntity.confidence * 100)}%</div>
+          )}
         </div>
       </div>
 
-      <div className="absolute right-4 top-4 z-10 flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white/85 backdrop-blur px-3 py-2 font-mono text-[11px] text-zinc-500">
-        <MousePointer2 className="h-3.5 w-3.5" /> ziehen zum Drehen · scrollen zum Zoomen
+      {/* Steuerung */}
+      <div className="absolute right-4 top-4 z-10 flex flex-col items-end gap-2">
+        <div className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white/85 backdrop-blur px-3 py-2 font-mono text-[11px] text-zinc-500">
+          <MousePointer2 className="h-3.5 w-3.5" /> ziehen · scrollen · Objekt klicken
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            data-testid="toggle-heatmap"
+            onClick={() => setShowHeat((s) => !s)}
+            className={`flex items-center gap-1.5 rounded-md border px-3 py-2 text-[11px] font-medium transition-colors ${showHeat ? "border-red-300 bg-red-50 text-red-600" : "border-zinc-200 bg-white/85 text-zinc-600"}`}
+          >
+            <Flame className="h-3.5 w-3.5" /> Heatmap {showHeat ? "AN" : "AUS"}
+          </button>
+          <button
+            data-testid="reset-focus"
+            onClick={() => setFocusId(null)}
+            disabled={!focusEntity}
+            className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white/85 px-3 py-2 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50 disabled:opacity-40"
+          >
+            <Crosshair className="h-3.5 w-3.5" /> Fokus lösen
+          </button>
+        </div>
       </div>
 
-      {/* Legende */}
       <div className="absolute left-4 bottom-4 z-10 flex gap-3 rounded-md border border-zinc-200 bg-white/85 backdrop-blur px-4 py-2">
         {Object.entries(ENTITY_META).map(([k, m]) => (
           <span key={k} className="flex items-center gap-1.5 font-mono text-[11px] text-zinc-600">
@@ -171,13 +243,17 @@ export default function Field3D({ frame }) {
         ))}
       </div>
 
-      <Canvas
-        data-testid="field3d-canvas"
-        shadows
-        camera={{ position: [7, 6, 7], fov: 50 }}
-        style={{ background: "linear-gradient(180deg, #ffffff 0%, #f4f4f5 100%)" }}
-      >
-        <Scene frame={frame} />
+      {/* Heat-Legende */}
+      {showHeat && (
+        <div className="absolute right-4 bottom-4 z-10 rounded-md border border-zinc-200 bg-white/85 backdrop-blur px-3 py-2">
+          <div className="font-mono text-[10px] text-zinc-500 mb-1">Heat · Konfidenz</div>
+          <div className="h-2 w-32 rounded-full" style={{ background: "linear-gradient(90deg, #2563eb, #22c55e, #eab308, #ef4444)" }} />
+          <div className="flex justify-between font-mono text-[9px] text-zinc-400 mt-0.5"><span>0%</span><span>100%</span></div>
+        </div>
+      )}
+
+      <Canvas data-testid="field3d-canvas" shadows camera={{ position: [7, 6, 7], fov: 50 }} style={{ background: "linear-gradient(180deg, #ffffff 0%, #f4f4f5 100%)" }}>
+        <Scene frame={frame} focusId={focusId} onSelect={setFocusId} showHeat={showHeat} focusEntity={focusEntity} />
       </Canvas>
     </div>
   );

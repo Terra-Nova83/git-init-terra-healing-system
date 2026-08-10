@@ -234,6 +234,15 @@ async def sessions():
     return out
 
 
+@api_router.get("/sessions/{session_id}/frames")
+async def session_frames(session_id: str, limit: int = 600):
+    limit = max(1, min(limit, 5000))
+    docs = await db.telemetry.find(
+        {"session_id": session_id}, {"_id": 0, "_pk": 0}
+    ).sort("seq", 1).to_list(limit)
+    return docs
+
+
 # ---------------------------------------------------------------------------
 # LLM Anomalie- / Insight-Analyse (Emergent LLM Key)
 # ---------------------------------------------------------------------------
